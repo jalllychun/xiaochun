@@ -1,6 +1,6 @@
 var request = require('request');
 const querystring = require('querystring');
-var JSSoup = require('jssoup').default;
+const cheerio = require('cheerio');
 
 var baseUrl = 'https://www.incnjp.com/forum.php';
 var queryObject = {
@@ -37,45 +37,56 @@ request(options, function(error, response, body){
   if (!error && response.statusCode==200){
     // console.log(body);
     // make soup
-    var soup = new JSSoup(body);
-    var divTable = soup.find('div', 'kkzhonggu');
-    var table = divTable.nextElement;
-    var blogLists = table.findAll('tbody');
+    const $ = cheerio.load(body);
+    var blogLists = $('table.tb1', 'div.kkzhonggu').find('tr');
+    console.log(blogLists.length);
 
     itemInfoLists = [];
+    var re = /.*(\d{4}-\d{1,2}-\d{1,2}).*/;
     for (var i=0; i<blogLists.length;i++){
-      var tdLists = blogLists[i].findAll('td');
-      var pLists = tdLists[1].findAll('p');
-      var infoStrings = pLists[1].find('span').text.trim().split(',');
+      var p1 = $('p.p1', 'td.td2', blogLists[i]);
+      var p2 = $('p.p2', 'td.td2', blogLists[i]).text().split(',');
+      var p3 = $('p.p3', 'td.td2', blogLists[i]);
+      var p4 = $("p[class='p4 f1']", 'td.td2', blogLists[i]);
+      var a = $('a', p1);
+      var time;
+      if ($('span', p4).length!=0){
+        time = $('span', p4).attr('title');
+      }
+      else{
+        time = p4.not('a').text();
+        result = re.exec(time);
+        if (result != null){
+          time = result[1];
+        }
+      }
+
       var itemInfo = {
-        internalUrl: pLists[0].find('a').attrs.href,
-        location: pLists[1].contents[0]._text,
-        catogary: infoStrings[0].trim(),
-        consumtion: infoStrings[1].trim(),
-        moreDescrip: pLists[2].text,
-        bloger: pLists[3].text.split('发表于')[0].trim(),
-        timeStamp: pLists[3]
+        title: a.text(),
+        internalUrl: a.attr('href'),
+        location: p2[0].trim(),
+        catogary: p2[1].trim(),
+        hownew: p2[2].trim(),
+        description: p3.text().trim(),
+        author: $('a', p4).text(),
+        time: time,
+        price: $('span', 'td.td4', blogLists[i]).first().text()
       };
       itemInfoLists.push(itemInfo);
+      // console.log(itemInfo);
     }
 
     // to determine how many pages in total
-    var divTableFooter = soup.find('div', 'bm bw0 pgs cl');
-    var pagesString = divTableFooter.find('label').find('span').attrs.title;
+    var footerDiv = $("div[class='bm bw0 pgs cl']");
+    var pagesString = $('label', 'div.pg', footerDiv).text();
+    // console.log(pagesString);
     // regex matching
-    const regex = /[\u4e00-\u9fa5]* (\d+) [\u4e00-\u9fa5]*/;
+    const regex = /.*\/ (\d+) [\u4e00-\u9fa5].*/;
     var pagesRes  = regex.exec(pagesString);
     if (pagesRes != null){
       var pagesIntotal = pagesRes[1];
     }
     console.log('total: ' + pagesIntotal + ' page(s)');
-    //
-    for (var i=0; i<itemInfoLists.length; i++){
-      var blog = itemInfoLists[i];
-      //console.log(blog);
-    }
-
-    console.log(itemInfoLists[itemInfoLists.length-1].timeStamp.contents[0].contents[0]);
   }
   else{
     console.log('something wrong.');
